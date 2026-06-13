@@ -1,0 +1,17 @@
+Handwritten Meeting Note Simulation
+
+Meeting topic:
+Prototype review for the document intelligence system.
+
+Notes:
+- Upload flow should accept multiple documents.
+- OCR should run when normal text extraction is weak.
+- Chatbot answers must show document name and page number.
+- Source page image should open when the user clicks a citation.
+- Security decisions must be explained in the README.
+
+Action items:
+Shashank will complete the parser, RAG workflow, frontend upload page, and final demo video.
+
+Sensitivity:
+This note is internal project planning information.

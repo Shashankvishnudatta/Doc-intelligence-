@@ -1,0 +1,24 @@
+Employee Access Standard Operating Procedure
+
+Purpose:
+This SOP explains how employees receive, review, and lose access to internal systems.
+
+Access request workflow:
+1. Employee submits an access request.
+2. Manager approves the business need.
+3. IT admin assigns the minimum required permissions.
+4. Security team logs the access grant.
+5. Access is reviewed every 90 days.
+
+Role table:
+Role | Access Level | Review Frequency
+Intern | Limited project access | 30 days
+Engineer | Repository and staging tools | 90 days
+Manager | Team dashboards and approvals | 90 days
+Admin | Production and identity systems | 30 days
+
+Offboarding:
+All system access must be revoked within 24 hours of employee exit.
+
+Sensitivity:
+This document is confidential because it describes internal access controls.

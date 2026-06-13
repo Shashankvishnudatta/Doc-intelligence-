@@ -1,0 +1,17 @@
+Internal AI Usage Policy
+
+This document defines safe and responsible usage of AI systems inside the organization.
+
+Employees may use approved AI tools for summarization, drafting, coding assistance, research support, and workflow automation.
+
+Sensitive data handling:
+Employees must not upload confidential client data, passwords, API keys, private customer records, financial account details, or health information into public AI tools.
+
+Employee access:
+Only authorized employees may access internal AI assistants. Access must be reviewed every quarter by the security team.
+
+Responsible automation:
+AI-generated outputs must be reviewed by a human before being used in customer communication, legal documents, financial reports, or production systems.
+
+Sensitivity level:
+This document is classified as internal because it contains operational security guidance and employee access rules.

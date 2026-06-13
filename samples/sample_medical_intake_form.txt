@@ -1,0 +1,20 @@
+Medical Intake Form
+
+Patient Name: Demo Patient
+Age: 42
+Visit Type: General consultation
+
+Symptoms:
+The patient reports mild fever, cough, and fatigue for two days.
+
+Medication:
+Paracetamol 500mg was taken once yesterday.
+
+Doctor Notes:
+Patient should rest, drink fluids, and return if symptoms worsen.
+
+Privacy:
+This document contains health-related information and should be classified as highly sensitive.
+
+Security:
+Access should be restricted to authorized healthcare staff only.

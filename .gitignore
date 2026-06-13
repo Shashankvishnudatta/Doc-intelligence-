@@ -1,0 +1,40 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# Env files
+backend/.env
+frontend/.env.local
+
+# Runtime/generated backend data
+backend/data/uploads/*
+backend/data/pages/*
+backend/data/chroma/*
+backend/data/sqlite/*
+
+!backend/data/uploads/.gitkeep
+!backend/data/pages/.gitkeep
+!backend/data/chroma/.gitkeep
+!backend/data/sqlite/.gitkeep
+
+# Temporary files
+backend/corrected_ocr.json
+backend/bool
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

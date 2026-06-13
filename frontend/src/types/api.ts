@@ -1,0 +1,86 @@
+export type DocumentPageItem = {
+  id: string;
+  page_number: number;
+  extracted_text: string;
+  image_path: string;
+  tables_json: string | null;
+};
+
+export type DocumentListItem = {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  status: string;
+  page_count: number;
+  classification_json: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DocumentDetail = DocumentListItem & {
+  stored_filename: string;
+  file_path: string;
+  sha256_hash: string;
+  pages: DocumentPageItem[];
+};
+
+export type UploadResult = {
+  filename: string;
+  document_id: string | null;
+  status: string;
+  detail: string;
+  size_bytes: number | null;
+};
+
+export type BulkUploadResponse = {
+  total_files: number;
+  successful: number;
+  failed: number;
+  results: UploadResult[];
+};
+
+export type IndexResponse = {
+  document_id: string;
+  status: string;
+  page_count: number;
+  chunk_count: number;
+  detail: string;
+};
+
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type CitationItem = {
+  document_id: string;
+  document_name: string;
+  page_number: number;
+  source: string;
+  page_image_url: string;
+};
+
+export type ChatResponse = {
+  answer: string;
+  citations: CitationItem[];
+  retrieved_context_count: number;
+  grounded: boolean;
+};
+
+export type HealthResponse = {
+  status: string;
+  app: string;
+  environment: string;
+  message: string;
+};
+export type DeleteDocumentResponse = {
+  deleted: boolean;
+  document_id: string;
+  filename: string | null;
+  file_deleted: boolean | null;
+  page_images_deleted: boolean | null;
+  vectors_deleted: boolean | null;
+  detail: string;
+};

@@ -1,0 +1,23 @@
+Invoice Document
+
+Invoice ID: INV-2026-041
+Vendor: CloudOps Training Services
+Client: Build Fast with AI
+Invoice Date: 2026-06-10
+Due Date: 2026-06-25
+
+Invoice table:
+Item | Quantity | Unit Price | Total
+AI Engineering Workshop | 2 | 15000 | 30000
+Cloud Deployment Support | 1 | 12000 | 12000
+Security Review Session | 1 | 8000 | 8000
+
+Subtotal: 50000
+Tax: 9000
+Grand Total: 59000
+
+Payment terms:
+Payment must be completed within 15 days from the invoice date.
+
+Sensitivity:
+This document contains financial data and should be treated as confidential.

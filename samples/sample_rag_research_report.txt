@@ -1,0 +1,16 @@
+Research Report: Agentic Retrieval Augmented Generation
+
+Abstract:
+This report studies how retrieval augmented generation improves the accuracy of question answering over private document collections.
+
+Key findings:
+Agentic RAG systems can decide when to retrieve, how to filter context, and when to refuse an answer. The system should avoid hallucination when relevant context is missing.
+
+Architecture:
+The pipeline includes document ingestion, OCR extraction, chunking, embedding generation, vector search, context filtering, answer synthesis, and citation rendering.
+
+Evaluation:
+The system is evaluated using citation accuracy, retrieval relevance, no-answer correctness, and latency.
+
+Conclusion:
+Agentic RAG is useful for document intelligence applications where answers must be grounded in source documents.
