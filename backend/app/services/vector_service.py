@@ -7,6 +7,10 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+_CHROMA_CLIENT: Any = None
+_EMBEDDING_FUNCTION: Any = None
+_COLLECTION: Any = None
+
 
 def get_chroma_path() -> str:
     return str(
@@ -33,33 +37,54 @@ def get_embedding_model_name() -> str:
         getattr(
             settings,
             "EMBEDDING_MODEL_NAME",
-            getattr(settings, "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            getattr(
+                settings,
+                "EMBEDDING_MODEL",
+                "sentence-transformers/all-MiniLM-L6-v2",
+            ),
         )
     )
 
 
 def get_chroma_client() -> chromadb.PersistentClient:
-    return chromadb.PersistentClient(
-        path=get_chroma_path(),
-    )
+    global _CHROMA_CLIENT
+
+    if _CHROMA_CLIENT is None:
+        _CHROMA_CLIENT = chromadb.PersistentClient(
+            path=get_chroma_path(),
+        )
+
+    return _CHROMA_CLIENT
 
 
 def get_embedding_function() -> SentenceTransformerEmbeddingFunction:
-    return SentenceTransformerEmbeddingFunction(
-        model_name=get_embedding_model_name(),
-    )
+    global _EMBEDDING_FUNCTION
+
+    if _EMBEDDING_FUNCTION is None:
+        _EMBEDDING_FUNCTION = SentenceTransformerEmbeddingFunction(
+            model_name=get_embedding_model_name(),
+        )
+
+    return _EMBEDDING_FUNCTION
 
 
 def get_or_create_collection():
+    global _COLLECTION
+
+    if _COLLECTION is not None:
+        return _COLLECTION
+
     client = get_chroma_client()
 
-    return client.get_or_create_collection(
+    _COLLECTION = client.get_or_create_collection(
         name=get_collection_name(),
         embedding_function=get_embedding_function(),
         metadata={
             "hnsw:space": "cosine",
         },
     )
+
+    return _COLLECTION
 
 
 def add_chunks_to_vector_store(chunks: list[dict[str, Any]]) -> None:
@@ -116,12 +141,8 @@ def query_vector_store(
 
 
 def delete_document_vectors(document_id: str) -> None:
-    """
-    Delete vectors for a document without loading the embedding model.
+    global _COLLECTION
 
-    Deleting vectors does not require SentenceTransformer embeddings.
-    This keeps document deletion faster.
-    """
     client = get_chroma_client()
 
     try:
@@ -138,5 +159,9 @@ def delete_document_vectors(document_id: str) -> None:
                 "document_id": document_id,
             }
         )
+
+        # Reset cached collection so future queries/indexing see latest Chroma state.
+        _COLLECTION = None
+
     except Exception:
         return

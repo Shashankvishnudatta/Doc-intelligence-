@@ -5,10 +5,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    RAG_PROVIDER: str = "fallback"
+
+    HF_TOKEN: str | None = None
+    HF_MODEL: str = "Qwen/Qwen2.5-7B-Instruct:fastest"
+    HF_TIMEOUT_SECONDS: int = 5
     APP_NAME: str = "BFAI Document Intelligence RAG"
     APP_ENV: str = "development"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
 
+    GEMINI_API_KEY: str | None = None
+    RAG_USE_GEMINI: bool = False
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_VISION_OCR_ENABLED: bool = True
