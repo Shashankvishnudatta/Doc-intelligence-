@@ -118,3 +118,19 @@ export async function deleteDocument(documentId: string) {
 
   return response.json();
 }
+
+export function getApiAssetUrl(pathOrUrl?: string | null) {
+  if (!pathOrUrl) {
+    return "";
+  }
+
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+    return pathOrUrl;
+  }
+
+  const normalizedPath = pathOrUrl.startsWith("/")
+    ? pathOrUrl
+    : `/${pathOrUrl}`;
+
+  return `${API_BASE_URL}${normalizedPath}`;
+}

@@ -46,22 +46,24 @@ export type IndexResponse = {
   chunk_count?: number;
   error_message?: string | null;
 };
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
 
-export type CitationItem = {
-  document_id: string;
+export type Citation = {
+  document_id?: string | null;
   document_name: string;
   page_number: number;
-  source: string;
-  page_image_url: string;
+  source?: string | null;
+  text?: string | null;
+  page_image_url?: string | null;
 };
 
 export type ChatResponse = {
   answer: string;
-  citations: CitationItem[];
+  citations: Citation[];
   retrieved_context_count: number;
   grounded: boolean;
 };
@@ -72,6 +74,7 @@ export type HealthResponse = {
   environment: string;
   message: string;
 };
+
 export type DeleteDocumentResponse = {
   deleted: boolean;
   document_id: string;
