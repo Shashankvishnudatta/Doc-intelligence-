@@ -15,6 +15,29 @@ from app.schemas.chat import ChatMessage
 from app.services.vector_service import query_vector_store
 
 settings = get_settings()
+
+# Step 1 — Add provider constants and helpers
+VALID_RAG_PROVIDERS = {"fallback", "hf", "huggingface", "hugging_face", "gemini", "hybrid"}
+
+def get_rag_provider() -> str:
+    provider = str(getattr(settings, "RAG_PROVIDER", "fallback")).lower().strip()
+
+    if provider not in VALID_RAG_PROVIDERS:
+        return "fallback"
+
+    if provider in {"huggingface", "hugging_face"}:
+        return "hf"
+
+    return provider
+
+def is_hf_configured() -> bool:
+    return bool(getattr(settings, "HF_TOKEN", None))
+
+def is_gemini_configured() -> bool:
+    return bool(getattr(settings, "GEMINI_API_KEY", None)) and bool(
+        getattr(settings, "RAG_USE_GEMINI", False)
+    )
+
 GEMINI_DISABLED_FOR_SESSION = False
 GEMINI_DISABLED_REASON: str | None = None
 
@@ -28,7 +51,6 @@ STOPWORDS = {
     "tell", "me", "this", "that", "does", "do", "did", "can", "could", "would",
     "should", "please", "explain", "give", "show", "document", "documents",
 }
-
 
 def normalize_tokens(text: str) -> set[str]:
     tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
@@ -309,24 +331,23 @@ def is_gemini_permission_error(error: Exception) -> bool:
 
     return any(signal in error_text for signal in permission_signals)
 
-
+# Step 3 — Replace should_skip_gemini
 def should_skip_gemini() -> bool:
-    # For this assessment demo, use the fast grounded fallback by default.
-    # Gemini can be re-enabled later after API access is fixed.
-    rag_use_gemini = bool(getattr(settings, "RAG_USE_GEMINI", False))
+    provider = get_rag_provider()
 
     return (
-        GEMINI_DISABLED_FOR_SESSION
-        or not settings.GEMINI_API_KEY
-        or not rag_use_gemini
+        provider != "gemini"
+        or GEMINI_DISABLED_FOR_SESSION
+        or not is_gemini_configured()
     )
 
+# Step 2 — Replace should_use_huggingface
 def should_use_huggingface() -> bool:
-    provider = str(getattr(settings, "RAG_PROVIDER", "fallback")).lower().strip()
+    provider = get_rag_provider()
 
     return (
-        provider in {"hf", "huggingface", "hugging_face", "hybrid"}
-        and bool(getattr(settings, "HF_TOKEN", None))
+        provider in {"hf", "hybrid"}
+        and is_hf_configured()
         and not HF_DISABLED_FOR_SESSION
     )
 
@@ -784,27 +805,59 @@ def build_citations(context_items: list[dict[str, Any]]) -> list[dict[str, Any]]
 
     return citations
 
+# Step 4 — Replace should_answer_without_llm
 def should_answer_without_llm(question: str) -> bool:
     """
-    Decide whether the question can be answered faster and more reliably
-    using deterministic grounded evidence instead of a remote LLM call.
-    """
-    lower_question = question.lower()
+    Fast deterministic mode should handle direct factual questions where
+    retrieved evidence already contains the answer.
 
-    fast_patterns = [
-        "what does the access sop say about interns",
-        "what does the sop say about interns",
-        "what does the access standard say about interns",
-        "intern",
-        "interns",
-        "which document contains financial data",
-        "which document is highly sensitive",
-        "sensitivity level",
-        "what sensitivity",
-        "hallucination",
+    Complex synthesis questions should go to the LLM provider in hybrid mode.
+    """
+    lower_question = question.lower().strip()
+
+    if is_document_summary_question(question):
+        return False
+
+    complex_signals = [
+        "compare",
+        "difference",
+        "why",
+        "explain in detail",
+        "deeply explain",
+        "analyze",
+        "analysis",
+        "pros and cons",
+        "recommend",
+        "roadmap",
+        "strategy",
+        "improve",
+        "rewrite",
+        "generate",
     ]
 
-    return any(pattern in lower_question for pattern in fast_patterns)
+    if any(signal in lower_question for signal in complex_signals):
+        return False
+
+    direct_signals = [
+        "which document",
+        "which file",
+        "what document",
+        "what file",
+        "what does",
+        "what is the",
+        "what are the",
+        "who",
+        "when",
+        "where",
+        "sensitivity",
+        "financial data",
+        "intern",
+        "interns",
+        "hallucination",
+        "requirements",
+    ]
+
+    return any(signal in lower_question for signal in direct_signals)
 
 def generate_fallback_answer(question: str, context_items: list[dict[str, Any]]) -> str:
     if not context_items:
@@ -1090,12 +1143,16 @@ User question:
 
         return answer
 
+    # Step 9 — Make HF failure visible in backend logs
     except Exception as exc:
         HF_DISABLED_FOR_SESSION = True
         HF_DISABLED_REASON = str(exc)[:500]
 
+        print(f"[HF DISABLED] {HF_DISABLED_REASON}")
+
         return generate_fallback_answer(question, context_items)
 
+# Step 8 — Make generate_llm_answer only Gemini
 def generate_llm_answer(
     question: str,
     context_items: list[dict[str, Any]],
@@ -1103,14 +1160,6 @@ def generate_llm_answer(
 ) -> str:
     global GEMINI_DISABLED_FOR_SESSION
     global GEMINI_DISABLED_REASON
-    provider = str(getattr(settings, "RAG_PROVIDER", "fallback")).lower().strip()
-
-    if provider in {"hf", "huggingface", "hugging_face"}:
-        return generate_hf_answer(
-            question=question,
-            context_items=context_items,
-            conversation_history=conversation_history,
-        )
 
     if should_skip_gemini():
         return generate_fallback_answer(question, context_items)
@@ -1248,6 +1297,103 @@ def build_contextual_search_query(
 
     return clean_question + "\n\nPrevious conversation context:\n" + "\n".join(recent_context_parts)
 
+# Step 5 — Add selected-document no-hallucination guard
+def has_enough_selected_document_evidence(
+    question: str,
+    context_items: list[dict[str, Any]],
+) -> bool:
+    """
+    Prevent selected-document mode from answering unrelated questions.
+
+    Example:
+    Selected BFAI PDF + question "What is the capital of Japan?"
+    should still refuse.
+    """
+    if not context_items:
+        return False
+
+    if is_document_summary_question(question):
+        return True
+
+    if is_general_document_question(question):
+        return True
+
+    question_tokens = normalize_tokens(question)
+    intent_keywords = get_intent_keywords(question)
+
+    if not question_tokens and not intent_keywords:
+        return False
+
+    combined_text = " ".join(
+        [
+            clean_evidence_text(item.get("text") or "")
+            + " "
+            + str((item.get("metadata") or {}).get("document_name", ""))
+            + " "
+            + str((item.get("metadata") or {}).get("source", ""))
+            for item in context_items[:3]
+        ]
+    )
+
+    evidence_tokens = normalize_tokens(combined_text)
+
+    overlap = len(question_tokens.intersection(evidence_tokens))
+    intent_overlap = len(intent_keywords.intersection(evidence_tokens))
+
+    # Strong direct document questions can pass with small overlap.
+    if should_answer_without_llm(question) and (overlap >= 1 or intent_overlap >= 1):
+        return True
+
+    # For normal selected-doc questions, require stronger evidence.
+    return overlap >= 2 or intent_overlap >= 1
+
+# Step 6 — Add one central provider answer function
+def generate_answer_by_provider(
+    question: str,
+    context_items: list[dict[str, Any]],
+    conversation_history: list[ChatMessage],
+) -> str:
+    """
+    Central provider router.
+
+    This function is the only place that should decide whether the answer
+    comes from fallback, HF, Gemini, or hybrid.
+    """
+    provider = get_rag_provider()
+
+    if provider == "fallback":
+        return generate_fallback_answer(question, context_items)
+
+    if provider == "hf":
+        return generate_hf_answer(
+            question=question,
+            context_items=context_items,
+            conversation_history=conversation_history,
+        )
+
+    if provider == "gemini":
+        return generate_llm_answer(
+            question=question,
+            context_items=context_items,
+            conversation_history=conversation_history,
+        )
+
+    if provider == "hybrid":
+        if should_answer_without_llm(question):
+            return generate_fallback_answer(question, context_items)
+
+        if should_use_huggingface():
+            return generate_hf_answer(
+                question=question,
+                context_items=context_items,
+                conversation_history=conversation_history,
+            )
+
+        return generate_fallback_answer(question, context_items)
+
+    return generate_fallback_answer(question, context_items)
+
+
 def answer_question_with_rag(
     question: str,
     conversation_history: list[ChatMessage],
@@ -1302,35 +1448,39 @@ def answer_question_with_rag(
     elif should_use_single_best_context(clean_question):
         answer_context_items = context_items[:1]
 
-    provider = str(getattr(settings, "RAG_PROVIDER", "fallback")).lower().strip()
+    # Step 7 — Update answer_question_with_rag routing
+    if document_id and not has_enough_selected_document_evidence(
+        question=clean_question,
+        context_items=answer_context_items,
+    ):
+        return {
+            "answer": (
+                "I could not find relevant content in the selected document for this question. "
+                "Please select a different document or ask a question related to the selected document."
+            ),
+            "citations": [],
+            "retrieved_context_count": 0,
+            "grounded": False,
+        }
 
-    if provider == "hybrid" and should_answer_without_llm(clean_question):
-        answer = generate_fallback_answer(
-            question=clean_question,
-            context_items=answer_context_items,
-        )
-    elif provider == "hybrid" and is_document_summary_question(clean_question):
-        answer = generate_llm_answer(
-            question=clean_question,
-            context_items=answer_context_items,
-            conversation_history=conversation_history,
-        )
-    else:
-        answer = generate_llm_answer(
-            question=clean_question,
-            context_items=answer_context_items,
-            conversation_history=conversation_history,
-        )
+    answer = generate_answer_by_provider(
+        question=clean_question,
+        context_items=answer_context_items,
+        conversation_history=conversation_history,
+    )
 
     citations = build_citations(answer_context_items)
 
     answer_time = time.perf_counter() - answer_start_time
     total_time = time.perf_counter() - start_time
 
+    # Step 10 — Add provider timing to final log
     print(
         f"[RAG TIMING] retrieval={retrieval_time:.2f}s "
         f"answer={answer_time:.2f}s total={total_time:.2f}s "
-        f"provider={getattr(settings, 'RAG_PROVIDER', 'fallback')}"
+        f"provider={get_rag_provider()} "
+        f"hf_disabled={HF_DISABLED_FOR_SESSION} "
+        f"gemini_disabled={GEMINI_DISABLED_FOR_SESSION}"
     )
 
     return {

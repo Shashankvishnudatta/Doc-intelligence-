@@ -131,6 +131,16 @@ The repository includes 6 sample documents inside the `samples/` folder:
 6. `sample_medical_intake_form.txt`
 
 A seed script is included to ingest, parse, classify, and index all sample documents.
+### RAG Provider Modes
+
+The backend supports multiple answer-generation modes:
+
+- `fallback`: deterministic grounded answer generation from retrieved context.
+- `hf`: Hugging Face Inference Providers for LLM-based synthesis.
+- `hybrid`: fast deterministic answers for direct factual questions, Hugging Face for complex summary/explanation questions, and fallback if the provider is unavailable.
+- `gemini`: optional Gemini route if API access is available.
+
+The default recommended local mode is `hybrid` because it gives low-latency answers for direct questions while still supporting LLM synthesis for broader document summaries.
 
 ## 4. Project Structure
 
