@@ -28,27 +28,24 @@ export type DocumentDetail = DocumentListItem & {
 
 export type UploadResult = {
   filename: string;
-  document_id: string | null;
   status: string;
-  detail: string;
-  size_bytes: number | null;
+  document_id?: string | null;
+  error_message?: string | null;
 };
 
 export type BulkUploadResponse = {
   total_files: number;
-  successful: number;
-  failed: number;
+  successful_uploads: number;
+  failed_uploads: number;
   results: UploadResult[];
 };
 
 export type IndexResponse = {
   document_id: string;
   status: string;
-  page_count: number;
-  chunk_count: number;
-  detail: string;
+  chunk_count?: number;
+  error_message?: string | null;
 };
-
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;

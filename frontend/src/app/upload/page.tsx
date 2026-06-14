@@ -2,24 +2,23 @@
 
 import { useMemo, useState } from "react";
 import {
-  CheckCircle2,
-  FileText,
   FileUp,
   Loader2,
   ShieldCheck,
   UploadCloud,
-  XCircle,
 } from "lucide-react";
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import {
+  classifyDocument,
+  indexDocument,
+  parseDocument,
+  uploadDocuments,
+} from "@/lib/api";
 import { formatBytes } from "@/lib/format";
-import type {
-  BulkUploadResponse,
-  DocumentDetail,
-  IndexResponse,
-} from "@/types/api";
+import type { DocumentListItem, IndexResponse } from "@/types/api";
 
-type PipelineStatus =
+type UploadUiStatus =
   | "queued"
+  | "uploading"
   | "uploaded"
   | "parsing"
   | "parsed"
@@ -29,65 +28,90 @@ type PipelineStatus =
   | "indexed"
   | "failed";
 
-type PipelineItem = {
+type UploadItem = {
+  local_id: string;
   filename: string;
-  documentId: string | null;
-  sizeBytes: number | null;
-  status: PipelineStatus;
-  detail: string;
+  document_id: string | null;
+  size_bytes: number | null;
+  status: UploadUiStatus;
+  error_message: string | null;
 };
 
-function userStatusLabel(status: PipelineStatus) {
-  const labels: Record<PipelineStatus, string> = {
-    queued: "Waiting",
-    uploaded: "Uploaded",
-    parsing: "Reading document",
-    parsed: "Content extracted",
-    classifying: "Understanding content",
-    classified: "Content understood",
-    indexing: "Preparing for chat",
-    indexed: "Ready",
-    failed: "Failed",
-  };
-
-  return labels[status];
+function isAllowedStatus(status: string, allowed: string[]) {
+  return allowed.includes(status.toLowerCase());
 }
 
-function userStatusClass(status: PipelineStatus) {
-  if (status === "indexed") {
-    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+function assertDocumentStage(
+  document: DocumentListItem,
+  allowedStatuses: string[],
+  stageName: string
+) {
+  const currentStatus = String(document.status || "").toLowerCase();
+
+  if (currentStatus === "failed") {
+    throw new Error(
+      document.error_message || `${stageName} failed on the backend.`
+    );
   }
 
-  if (status === "failed") {
-    return "bg-red-50 text-red-700 ring-1 ring-red-200";
+  if (!isAllowedStatus(currentStatus, allowedStatuses)) {
+    throw new Error(
+      `${stageName} did not complete correctly. Backend returned status: ${document.status}`
+    );
   }
-
-  if (status === "queued" || status === "uploaded") {
-    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
-  }
-
-  return "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200";
 }
 
-function userDetail(status: PipelineStatus, originalDetail: string) {
-  const details: Partial<Record<PipelineStatus, string>> = {
-    queued: "Waiting for upload to begin.",
-    uploaded: "File uploaded securely. Preparing document analysis.",
-    parsing: "Reading text, images, OCR content, and page evidence.",
-    parsed: "Document content was extracted successfully.",
-    classifying: "Identifying document type, topic, and sensitivity signals.",
-    classified: "Document understanding is complete.",
-    indexing: "Preparing the document so the chatbot can answer from it.",
-    indexed: "This document is ready for citation-backed chat.",
-    failed: originalDetail,
-  };
+function assertIndexStage(indexResult: IndexResponse) {
+  const currentStatus = String(indexResult.status || "").toLowerCase();
 
-  return details[status] || originalDetail;
+  if (currentStatus === "failed") {
+    throw new Error(indexResult.error_message || "Indexing failed.");
+  }
+
+  if (currentStatus !== "indexed") {
+    throw new Error(
+      `Indexing did not complete correctly. Backend returned status: ${indexResult.status}`
+    );
+  }
+}
+
+function getProgressValue(status: UploadUiStatus | string) {
+  const normalized = status.toLowerCase();
+
+  if (normalized === "queued") return 5;
+  if (normalized === "uploading") return 15;
+  if (normalized === "uploaded") return 25;
+  if (normalized === "parsing") return 40;
+  if (normalized === "parsed") return 50;
+  if (normalized === "classifying") return 65;
+  if (normalized === "classified") return 75;
+  if (normalized === "indexing") return 90;
+  if (normalized === "indexed") return 100;
+  if (normalized === "failed") return 100;
+
+  return 10;
+}
+
+function getStatusLabel(status: UploadUiStatus | string) {
+  const normalized = status.toLowerCase();
+
+  if (normalized === "queued") return "Queued";
+  if (normalized === "uploading") return "Uploading";
+  if (normalized === "uploaded") return "Uploaded";
+  if (normalized === "parsing") return "Parsing";
+  if (normalized === "parsed") return "Parsed";
+  if (normalized === "classifying") return "Classifying";
+  if (normalized === "classified") return "Classified";
+  if (normalized === "indexing") return "Indexing";
+  if (normalized === "indexed") return "Ready";
+  if (normalized === "failed") return "Failed";
+
+  return status;
 }
 
 export default function UploadPage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [items, setItems] = useState<PipelineItem[]>([]);
+  const [uploadResults, setUploadResults] = useState<UploadItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const canUpload = selectedFiles.length > 0 && !isUploading;
@@ -96,136 +120,171 @@ export default function UploadPage() {
     return selectedFiles.reduce((sum, file) => sum + file.size, 0);
   }, [selectedFiles]);
 
-  function updateItem(filename: string, updates: Partial<PipelineItem>) {
-    setItems((current) =>
-      current.map((item) =>
-        item.filename === filename ? { ...item, ...updates } : item
-      )
-    );
-  }
-
-  async function runPipeline(item: PipelineItem) {
-    if (!item.documentId) return;
-
-    try {
-      updateItem(item.filename, {
-        status: "parsing",
-        detail: "Reading text, OCR content, tables, and page images.",
-      });
-
-      await apiFetch<DocumentDetail>(`/documents/${item.documentId}/parse`, {
-        method: "POST",
-      });
-
-      updateItem(item.filename, {
-        status: "parsed",
-        detail: "Document content extracted.",
-      });
-
-      updateItem(item.filename, {
-        status: "classifying",
-        detail: "Understanding document type, topic, and sensitivity.",
-      });
-
-      await apiFetch<DocumentDetail>(`/documents/${item.documentId}/classify`, {
-        method: "POST",
-      });
-
-      updateItem(item.filename, {
-        status: "classified",
-        detail: "Document understanding completed.",
-      });
-
-      updateItem(item.filename, {
-        status: "indexing",
-        detail: "Preparing document for citation-backed chat.",
-      });
-
-      const indexResponse = await apiFetch<IndexResponse>(
-        `/documents/${item.documentId}/index`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (indexResponse.status !== "indexed") {
-        throw new Error(indexResponse.detail || "Document preparation failed.");
-      }
-
-      updateItem(item.filename, {
-        status: "indexed",
-        detail: `Ready for chat. ${indexResponse.chunk_count} searchable sections prepared.`,
-      });
-    } catch (error) {
-      updateItem(item.filename, {
-        status: "failed",
-        detail:
-          error instanceof Error
-            ? error.message
-            : "Unexpected document processing error.",
-      });
+  async function handleUploadAndPrepare() {
+    if (selectedFiles.length === 0) {
+      return;
     }
-  }
-
-  async function handleUpload() {
-    if (!canUpload) return;
 
     setIsUploading(true);
-
-    const initialItems: PipelineItem[] = selectedFiles.map((file) => ({
-      filename: file.name,
-      documentId: null,
-      sizeBytes: file.size,
-      status: "queued",
-      detail: "Waiting for upload...",
-    }));
-
-    setItems(initialItems);
+    setUploadResults(
+      selectedFiles.map((file, index) => ({
+        local_id: `${file.name}-${file.size}-${index}`,
+        filename: file.name,
+        size_bytes: file.size,
+        status: "queued",
+        document_id: null,
+        error_message: null,
+      }))
+    );
 
     try {
-      const formData = new FormData();
-
-      selectedFiles.forEach((file) => {
-        formData.append("files", file);
-      });
-
-      const response = await fetch(`${API_BASE_URL}/uploads/bulk`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const uploadResponse = (await response.json()) as BulkUploadResponse;
-
-      const uploadedItems: PipelineItem[] = uploadResponse.results.map(
-        (result) => ({
-          filename: result.filename,
-          documentId: result.document_id,
-          sizeBytes: result.size_bytes,
-          status: result.status === "failed" ? "failed" : "uploaded",
-          detail: result.detail,
-        })
+      setUploadResults((current) =>
+        current.map((item) => ({
+          ...item,
+          status: "uploading",
+        }))
       );
 
-      setItems(uploadedItems);
+      const uploadResponse = await uploadDocuments(selectedFiles);
 
-      for (const item of uploadedItems) {
-        if (item.status !== "failed" && item.documentId) {
-          await runPipeline(item);
+      for (let index = 0; index < uploadResponse.results.length; index++) {
+  const uploadResult = uploadResponse.results[index];
+  const selectedFile = selectedFiles[index];
+
+  const localId = `${selectedFile?.name ?? uploadResult.filename}-${
+    selectedFile?.size ?? 0
+  }-${index}`;
+
+        if (
+          uploadResult.status !== "uploaded" ||
+          !uploadResult.document_id
+        ) {
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? {
+                    ...item,
+                    status: "failed",
+                    error_message:
+                      uploadResult.error_message ||
+                      "Upload failed before parsing started.",
+                  }
+                : item
+            )
+          );
+
+          continue;
+        }
+
+        const documentId = uploadResult.document_id;
+
+        setUploadResults((current) =>
+          current.map((item) =>
+            item.local_id === localId
+              ? {
+                  ...item,
+                  status: "uploaded",
+                  document_id: documentId,
+                  error_message: null,
+                }
+              : item
+          )
+        );
+
+        try {
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "parsing" }
+                : item
+            )
+          );
+
+          const parsedDocument = await parseDocument(documentId);
+
+          assertDocumentStage(
+            parsedDocument,
+            ["parsed", "classified", "indexed"],
+            "Parsing"
+          );
+
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "parsed", error_message: null }
+                : item
+            )
+          );
+
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "classifying" }
+                : item
+            )
+          );
+
+          const classifiedDocument = await classifyDocument(documentId);
+
+          assertDocumentStage(
+            classifiedDocument,
+            ["classified", "indexed"],
+            "Classification"
+          );
+
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "classified", error_message: null }
+                : item
+            )
+          );
+
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "indexing" }
+                : item
+            )
+          );
+
+          const indexedDocument = await indexDocument(documentId);
+
+          assertIndexStage(indexedDocument);
+
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? { ...item, status: "indexed", error_message: null }
+                : item
+            )
+          );
+        } catch (pipelineError) {
+          setUploadResults((current) =>
+            current.map((item) =>
+              item.local_id === localId
+                ? {
+                    ...item,
+                    status: "failed",
+                    error_message:
+                      pipelineError instanceof Error
+                        ? pipelineError.message
+                        : "Document preparation failed.",
+                  }
+                : item
+            )
+          );
         }
       }
-    } catch (error) {
-      setItems((current) =>
+    } catch (uploadError) {
+      setUploadResults((current) =>
         current.map((item) => ({
           ...item,
           status: "failed",
-          detail:
-            error instanceof Error
-              ? error.message
-              : "Unexpected upload error.",
+          error_message:
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Upload failed.",
         }))
       );
     } finally {
@@ -234,168 +293,180 @@ export default function UploadPage() {
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
-            <UploadCloud className="h-7 w-7" />
-          </div>
-
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">
-              Upload documents
-            </h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              Add PDFs, text files, and images. The system prepares them for chat automatically.
-            </p>
-          </div>
-        </div>
-
-        <label className="mt-6 flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-cyan-200 bg-cyan-50/50 p-6 text-center transition hover:border-cyan-300 hover:bg-cyan-50">
-          <FileUp className="h-14 w-14 text-cyan-600" />
-
-          <p className="mt-4 text-xl font-black text-slate-950">
-            Select multiple documents
-          </p>
-
-          <p className="mt-2 max-w-md text-sm font-medium leading-6 text-slate-600">
-            Supported formats: PDF, TXT, PNG, JPG, and JPEG.
-          </p>
-
-          <input
-            className="hidden"
-            type="file"
-            multiple
-            accept=".pdf,.txt,.png,.jpg,.jpeg,application/pdf,text/plain,image/png,image/jpeg"
-            onChange={(event) => {
-              const files = Array.from(event.target.files || []);
-              setSelectedFiles(files);
-              setItems([]);
-            }}
-          />
-        </label>
-
-        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm font-black text-slate-950">Selected files</p>
-
-          {selectedFiles.length === 0 ? (
-            <p className="mt-2 text-sm font-medium text-slate-500">
-              No files selected yet.
-            </p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {selectedFiles.map((file) => (
-                <div
-                  key={`${file.name}-${file.size}`}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <span className="truncate font-bold text-slate-800">
-                    {file.name}
-                  </span>
-
-                  <span className="shrink-0 font-medium text-slate-500">
-                    {formatBytes(file.size)}
-                  </span>
-                </div>
-              ))}
-
-              <div className="pt-2 text-xs font-black uppercase tracking-[0.18em] text-slate-400">
-                Total size: {formatBytes(totalSelectedSize)}
-              </div>
+    <div className="h-[100dvh] w-full overflow-hidden p-6">
+      <div className="grid h-full w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(420px,0.9fr)_minmax(0,1.1fr)]">
+        
+        {/* Upload documents card */}
+        <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/70 bg-white/75 p-7 shadow-2xl shadow-slate-300/50 backdrop-blur-xl">
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
+              <UploadCloud className="h-7 w-7" />
             </div>
-          )}
-        </div>
 
-        <button
-          onClick={handleUpload}
-          disabled={!canUpload}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isUploading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Preparing documents...
-            </>
-          ) : (
-            <>
-              <UploadCloud className="h-4 w-4" />
-              Upload and prepare for chat
-            </>
-          )}
-        </button>
-      </div>
-
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-2xl font-black text-slate-950">
-              Preparation status
-            </h3>
-
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              Each document is securely uploaded, understood, and made ready for citation-backed chat.
-            </p>
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">
+                Upload documents
+              </h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Add PDFs, text files, and images. The system prepares them for chat automatically.
+              </p>
+            </div>
           </div>
 
-          <ShieldCheck className="h-7 w-7 text-emerald-600" />
-        </div>
+          <label className="mt-6 flex min-h-64 shrink-0 cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-cyan-200 bg-cyan-50/50 p-6 text-center transition hover:border-cyan-300 hover:bg-cyan-50">
+            <FileUp className="h-14 w-14 text-cyan-600" />
 
-        <div className="mt-5 space-y-3">
-          {items.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm font-medium text-slate-500">
-              Upload results will appear here.
-            </div>
-          ) : (
-            items.map((item) => (
-              <div
-                key={item.filename}
-                className="rounded-3xl border border-slate-200 bg-slate-50 p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200">
-                        <FileText className="h-5 w-5" />
-                      </div>
+            <p className="mt-4 text-xl font-black text-slate-950">
+              Select multiple documents
+            </p>
 
-                      <div className="min-w-0">
-                        <p className="truncate font-black text-slate-950">
-                          {item.filename}
-                        </p>
-                        <p className="mt-1 text-xs font-medium text-slate-500">
-                          {formatBytes(item.sizeBytes)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+            <p className="mt-2 max-w-md text-sm font-medium leading-6 text-slate-600">
+              Supported formats: PDF, TXT, PNG, JPG, and JPEG.
+            </p>
 
-                  <div className="flex items-center gap-2">
-                    {item.status === "indexed" ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    ) : item.status === "failed" ? (
-                      <XCircle className="h-5 w-5 text-red-600" />
-                    ) : item.status !== "queued" && item.status !== "uploaded" ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-cyan-600" />
-                    ) : null}
+            <input
+              className="hidden"
+              type="file"
+              multiple
+              accept=".pdf,.txt,.png,.jpg,.jpeg,application/pdf,text/plain,image/png,image/jpeg"
+              onChange={(event) => {
+                const files = Array.from(event.target.files || []);
+                setSelectedFiles(files);
+                setUploadResults([]);
+              }}
+            />
+          </label>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-black ${userStatusClass(
-                        item.status
-                      )}`}
-                    >
-                      {userStatusLabel(item.status)}
+          <div className="mt-5 flex-1 min-h-0 flex flex-col rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black text-slate-950">Selected files</p>
+
+            {selectedFiles.length === 0 ? (
+              <p className="mt-2 text-sm font-medium text-slate-500">
+                No files selected yet.
+              </p>
+            ) : (
+              <div className="mt-3 flex-1 overflow-y-auto space-y-2 pr-2">
+                {selectedFiles.map((file, index) => (
+  <div
+    key={`${file.name}-${file.size}-${index}`}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <span className="truncate font-bold text-slate-800">
+                      {file.name}
+                    </span>
+
+                    <span className="shrink-0 font-medium text-slate-500">
+                      {formatBytes(file.size)}
                     </span>
                   </div>
-                </div>
-
-                <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
-                  {userDetail(item.status, item.detail)}
-                </p>
+                ))}
               </div>
-            ))
-          )}
+            )}
+            
+            {selectedFiles.length > 0 && (
+              <div className="pt-3 mt-auto shrink-0 text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                Total size: {formatBytes(totalSelectedSize)}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={handleUploadAndPrepare}
+            disabled={!canUpload}
+            className="mt-5 shrink-0 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Preparing documents...
+              </>
+            ) : (
+              <>
+                <UploadCloud className="h-4 w-4" />
+                Upload and prepare for chat
+              </>
+            )}
+          </button>
         </div>
+
+        {/* Preparation status card */}
+        <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/70 bg-white/75 p-7 shadow-2xl shadow-slate-300/50 backdrop-blur-xl">
+          <div className="flex items-start justify-between gap-4 shrink-0">
+            <div>
+              <h3 className="text-2xl font-black text-slate-950">
+                Preparation status
+              </h3>
+
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Each document is securely uploaded, understood, and made ready for citation-backed chat.
+              </p>
+            </div>
+
+            <ShieldCheck className="h-7 w-7 shrink-0 text-emerald-600" />
+          </div>
+
+          <div className="mt-6 min-h-0 flex-1 overflow-y-auto rounded-3xl border border-slate-200 bg-slate-50/70">
+            {uploadResults.length === 0 ? (
+              <div className="p-6 text-sm font-semibold text-slate-500">
+                Upload results will appear here.
+              </div>
+            ) : (
+              uploadResults.map((result) => {
+                const progress = getProgressValue(result.status);
+                const isFailed = result.status === "failed";
+                const isReady = result.status === "indexed";
+
+                return (
+                  <div
+                    key={result.local_id}
+                    className="border-b border-slate-100 px-5 py-4 last:border-b-0"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950">
+                          {result.filename}
+                        </p>
+
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          {getStatusLabel(result.status)}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-black ${
+                          isFailed
+                            ? "bg-red-50 text-red-600"
+                            : isReady
+                              ? "bg-emerald-50 text-emerald-600"
+                              : "bg-cyan-50 text-cyan-700"
+                        }`}
+                      >
+                        {getStatusLabel(result.status)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isFailed ? "bg-red-500" : "bg-cyan-500"
+                        }`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+
+                    {result.error_message && (
+                      <p className="mt-2 text-xs font-semibold leading-5 text-red-600">
+                        {result.error_message}
+                      </p>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
       </div>
-    </section>
+    </div>
   );
 }
