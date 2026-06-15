@@ -227,11 +227,13 @@ copy .env.example .env
 Then update:
 
 ```env
-GEMINI_API_KEY="your-api-key"
-GEMINI_MODEL="gemini-2.5-flash"
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_VISION_MODEL=gemini-2.5-flash
+RAG_USE_GEMINI_VISION=true
 ```
 
-Gemini is optional for demo because the project includes a fallback classifier and fallback answer generator.
+Do not commit the real `.env` file. Gemini is optional for the basic demo because the project includes fallback classification and fallback answer generation, but Gemini Vision should be configured for the strongest image and handwritten-document answers.
 
 ### 5.4 Required local tools
 
@@ -466,6 +468,8 @@ Would add with more time:
 * ChromaDB is local and not user-isolated.
 
 ## 11. Demo Flow
+
+For a detailed walkthrough, see `docs/DEMO_SCRIPT.md`.
 
 Recommended demo steps:
 
