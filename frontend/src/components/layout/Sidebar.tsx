@@ -9,7 +9,6 @@ import {
   Home,
   MessageSquare,
   Plus,
-  ShieldCheck,
   Trash2,
   UploadCloud,
   Zap,
@@ -130,25 +129,25 @@ export function Sidebar() {
   }
 
   useEffect(() => {
-  queueMicrotask(() => {
-    loadSessionsFromStorage();
-  });
+    queueMicrotask(() => {
+      loadSessionsFromStorage();
+    });
 
-  function handleStorageUpdate() {
-    loadSessionsFromStorage();
-  }
+    function handleStorageUpdate() {
+      loadSessionsFromStorage();
+    }
 
-  window.addEventListener("storage", handleStorageUpdate);
-  window.addEventListener("bfai:chat-sessions-updated", handleStorageUpdate);
+    window.addEventListener("storage", handleStorageUpdate);
+    window.addEventListener("bfai:chat-sessions-updated", handleStorageUpdate);
 
-  return () => {
-    window.removeEventListener("storage", handleStorageUpdate);
-    window.removeEventListener(
-      "bfai:chat-sessions-updated",
-      handleStorageUpdate
-    );
-  };
-}, []);
+    return () => {
+      window.removeEventListener("storage", handleStorageUpdate);
+      window.removeEventListener(
+        "bfai:chat-sessions-updated",
+        handleStorageUpdate
+      );
+    };
+  }, []);
 
   return (
     <aside className="relative hidden h-screen w-[320px] shrink-0 overflow-hidden bg-zinc-950 text-zinc-400 lg:flex">
@@ -162,9 +161,9 @@ export function Sidebar() {
           </div>
 
           <div>
-            <p className="text-base font-black tracking-tight">Nexus AI</p>
+            <p className="text-base font-black tracking-tight">DOC AI</p>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-              Intelligence Node
+              Intelligence Mode
             </p>
           </div>
         </div>
@@ -267,20 +266,6 @@ export function Sidebar() {
                 </div>
               ))
             )}
-          </div>
-        </div>
-
-        <div className="mt-auto rounded-2xl border border-emerald-900/40 bg-emerald-950/25 p-4">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-7 w-7 text-emerald-400" />
-            <div>
-              <p className="text-xs font-black text-emerald-400">
-                Secure RAG Active
-              </p>
-              <p className="mt-0.5 text-[10px] font-semibold text-emerald-700">
-                Citation-first guardrails enabled.
-              </p>
-            </div>
           </div>
         </div>
       </div>
