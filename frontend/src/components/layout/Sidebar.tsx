@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Plus,
   ShieldCheck,
+  Trash2,
   UploadCloud,
   Zap,
 } from "lucide-react";
@@ -87,6 +88,44 @@ export function Sidebar() {
       setSessions(sorted);
     } catch {
       setSessions([]);
+    }
+  }
+
+  function handleDeleteSession(
+    event: MouseEvent<HTMLButtonElement>,
+    sessionId: string
+  ) {
+    event.stopPropagation();
+
+    try {
+      const raw = window.localStorage.getItem(CHAT_STORAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as ChatSession[]) : [];
+      const sessionsToKeep = Array.isArray(parsed)
+        ? parsed.filter((session) => session.id !== sessionId)
+        : [];
+
+      window.localStorage.setItem(
+        CHAT_STORAGE_KEY,
+        JSON.stringify(sessionsToKeep)
+      );
+
+      setSessions(
+        [...sessionsToKeep].sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+      );
+
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event("bfai:chat-sessions-updated"));
+        window.dispatchEvent(
+          new CustomEvent("bfai:delete-chat-session", {
+            detail: { sessionId },
+          })
+        );
+      }, 0);
+    } catch {
+      loadSessionsFromStorage();
     }
   }
 
@@ -180,38 +219,52 @@ export function Sidebar() {
               </div>
             ) : (
               sessions.slice(0, 8).map((session) => (
-                <button
+                <div
                   key={session.id}
-                  type="button"
-                  onClick={() => {
-                    window.localStorage.setItem(
-                      "bfai_open_chat_session_id",
-                      session.id
-                    );
-
-                    if (pathname === "/chat") {
-                      window.dispatchEvent(
-                        new CustomEvent("bfai:open-chat-session", {
-                          detail: {
-                            sessionId: session.id,
-                          },
-                        })
-                      );
-                    } else {
-                      router.push("/chat");
-                    }
-                  }}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-2 text-left transition hover:border-indigo-500 hover:bg-indigo-500/10"
+                  className="group flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/30 px-3 py-2 transition hover:border-indigo-500 hover:bg-indigo-500/10"
                 >
-                  <p className="truncate text-xs font-black text-zinc-200">
-                    {session.title}
-                  </p>
-                  <p className="mt-0.5 text-[10px] font-semibold text-zinc-600">
-                    {session.messages.length === 0
-                      ? "Empty chat"
-                      : `${session.messages.length} messages`}
-                  </p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.localStorage.setItem(
+                        "bfai_open_chat_session_id",
+                        session.id
+                      );
+
+                      if (pathname === "/chat") {
+                        window.dispatchEvent(
+                          new CustomEvent("bfai:open-chat-session", {
+                            detail: {
+                              sessionId: session.id,
+                            },
+                          })
+                        );
+                      } else {
+                        router.push("/chat");
+                      }
+                    }}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="truncate text-xs font-black text-zinc-200">
+                      {session.title}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-semibold text-zinc-600">
+                      {session.messages.length === 0
+                        ? "Empty chat"
+                        : `${session.messages.length} messages`}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Delete chat"
+                    aria-label={`Delete chat ${session.title}`}
+                    onClick={(event) => handleDeleteSession(event, session.id)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-600 opacity-80 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))
             )}
           </div>

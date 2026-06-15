@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import {
+  ArrowRight,
   FileUp,
   Loader2,
+  MessageSquare,
   ShieldCheck,
   UploadCloud,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   classifyDocument,
   indexDocument,
@@ -110,11 +113,20 @@ function getStatusLabel(status: UploadUiStatus | string) {
 }
 
 export default function UploadPage() {
+  const router = useRouter();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadResults, setUploadResults] = useState<UploadItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
   const canUpload = selectedFiles.length > 0 && !isUploading;
+
+  const readyDocuments = useMemo(() => {
+    return uploadResults.filter(
+      (result) => result.status === "indexed" && result.document_id
+    );
+  }, [uploadResults]);
+
+  const hasReadyDocuments = readyDocuments.length > 0;
 
   const totalSelectedSize = useMemo(() => {
     return selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -292,6 +304,19 @@ export default function UploadPage() {
     }
   }
 
+  function handleGoToChat() {
+    const firstReadyDocument = readyDocuments[0];
+
+    if (firstReadyDocument?.document_id) {
+      window.localStorage.setItem(
+        "bfai_pending_document_id",
+        firstReadyDocument.document_id
+      );
+    }
+
+    router.push("/chat");
+  }
+
   return (
     <div className="h-[100dvh] w-full overflow-hidden p-6">
       <div className="grid h-full w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(420px,0.9fr)_minmax(0,1.1fr)]">
@@ -464,6 +489,38 @@ export default function UploadPage() {
               })
             )}
           </div>
+
+          {hasReadyDocuments && (
+            <div className="mt-5 shrink-0 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-700 ring-1 ring-emerald-100">
+                  <MessageSquare className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-black text-slate-950">
+                    Ready to ask questions?
+                  </p>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+                    Your{" "}
+                    {readyDocuments.length === 1
+                      ? "document is"
+                      : "documents are"}{" "}
+                    indexed and ready for citation-backed chat.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoToChat}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-indigo-600"
+              >
+                Go to Chat
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
       </div>

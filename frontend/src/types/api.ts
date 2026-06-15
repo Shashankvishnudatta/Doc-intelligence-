@@ -13,10 +13,10 @@ export type DocumentListItem = {
   size_bytes: number;
   status: string;
   page_count: number;
-  classification_json: string | null;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
+  classification_json?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type DocumentDetail = DocumentListItem & {
@@ -76,11 +76,12 @@ export type HealthResponse = {
 };
 
 export type DeleteDocumentResponse = {
-  deleted: boolean;
   document_id: string;
-  filename: string | null;
-  file_deleted: boolean | null;
-  page_images_deleted: boolean | null;
-  vectors_deleted: boolean | null;
+  status?: string;
+  deleted?: boolean;
+  filename?: string | null;
+  file_deleted?: boolean | null;
+  page_images_deleted?: boolean | null;
+  vectors_deleted?: boolean | null;
   detail: string;
 };

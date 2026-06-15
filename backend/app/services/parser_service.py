@@ -3,8 +3,11 @@ from pathlib import Path
 from typing import Any
 
 import pdfplumber
-import pytesseract
-from app.services.ocr_service import extract_best_text_from_image
+from app.services.ocr_service import (
+    clean_ocr_text_for_storage,
+    coerce_ocr_result_text,
+    extract_best_text_from_image,
+)
 from pdf2image import convert_from_path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -20,7 +23,16 @@ def get_document_page_dir(document_id: str) -> Path:
 
 
 def clean_text(text: str) -> str:
-    return "\n".join(line.rstrip() for line in text.splitlines()).strip()
+    return clean_ocr_text_for_storage(
+        "\n".join(line.rstrip() for line in text.splitlines()).strip()
+    )
+
+
+def is_text_weak(text: str, min_chars: int = 80) -> bool:
+    cleaned = clean_text(text)
+    alpha_chars = sum(1 for char in cleaned if char.isalpha())
+
+    return len(cleaned.strip()) < min_chars or alpha_chars < 30
 
 
 def normalize_tables(tables: list[Any]) -> list[list[list[str]]]:
@@ -90,23 +102,43 @@ def parse_pdf(file_path: Path, document_id: str) -> list[dict]:
                 raw_tables = page.extract_tables() or []
                 normalized_tables = normalize_tables(raw_tables)
 
+            embedded_text = clean_text(extracted_text)
+            table_text = tables_to_text(normalized_tables) if normalized_tables else ""
             ocr_text = ""
+            ocr_quality = 0.0
+            ocr_used = False
 
-            if len(extracted_text.strip()) < 80:
-                ocr_text = pytesseract.image_to_string(page_image) or ""
+            if is_text_weak(embedded_text):
+                print(f"[PDF OCR] page={page_number} using advanced OCR service")
+                ocr_result = extract_best_text_from_image(
+                    image=page_image,
+                    stored_image_path=image_path,
+                )
+                ocr_text = coerce_ocr_result_text(ocr_result)
+                ocr_quality = float(ocr_result.get("quality_score") or 0.0)
+                ocr_used = bool(ocr_text)
 
             final_text_parts: list[str] = []
 
-            if extracted_text.strip():
-                final_text_parts.append(clean_text(extracted_text))
+            if embedded_text.strip():
+                final_text_parts.append(embedded_text)
 
             if ocr_text.strip():
                 final_text_parts.append("[OCR TEXT]\n" + clean_text(ocr_text))
 
             if normalized_tables:
-                final_text_parts.append("[EXTRACTED TABLES]\n" + tables_to_text(normalized_tables))
+                final_text_parts.append("[EXTRACTED TABLES]\n" + clean_text(table_text))
 
             final_text = "\n\n".join(final_text_parts).strip()
+
+            print(
+                "[Parser] "
+                f"page={page_number} "
+                f"embedded_text_chars={len(embedded_text)} "
+                f"table_chars={len(table_text)} "
+                f"ocr_used={str(ocr_used).lower()} "
+                f"ocr_quality={ocr_quality:.2f}"
+            )
 
             parsed_pages.append(
                 {
@@ -226,17 +258,24 @@ def parse_image_file(file_path: Path, document_id: str) -> list[dict]:
             stored_image_path=image_path,
         )
 
-    extracted_text = clean_text(ocr_result["text"])
+    extracted_text = clean_text(coerce_ocr_result_text(ocr_result))
 
     if ocr_result.get("engine"):
-        extracted_text = (
-            f"[OCR ENGINE: {ocr_result['engine']}]\n"
-            f"[OCR QUALITY SCORE: {ocr_result['quality_score']:.2f}]\n\n"
-            f"{extracted_text}"
-        ).strip()
+        print(
+            "[OCR PARSE] "
+            f"document_id={document_id} "
+            f"engine={ocr_result['engine']} "
+            f"variant={ocr_result.get('variant', 'unknown')} "
+            f"quality={float(ocr_result.get('quality_score') or 0):.2f} "
+            f"gemini_used={ocr_result.get('gemini_used')}"
+        )
 
     if ocr_result.get("gemini_error"):
-        extracted_text += f"\n\n[GEMINI OCR ERROR]\n{ocr_result['gemini_error']}"
+        print(
+            "[OCR PARSE WARNING] "
+            f"document_id={document_id} "
+            f"gemini_error={str(ocr_result['gemini_error'])[:240]}"
+        )
 
     return [
         {
@@ -258,7 +297,7 @@ def parse_document_file(file_path: str, document_id: str, content_type: str) -> 
     if extension == ".txt" or content_type == "text/plain":
         return parse_text_file(path, document_id)
 
-    if extension in {".png", ".jpg", ".jpeg"} or content_type in {"image/png", "image/jpeg"}:
+    if extension in {".png", ".jpg", ".jpeg", ".webp"} or content_type in {"image/png", "image/jpeg", "image/webp"}:
         return parse_image_file(path, document_id)
 
     raise ValueError(f"Unsupported document type for parsing: {extension}") 

@@ -3,9 +3,9 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  CircleCheck,
   FileCheck2,
   FileText,
-  LockKeyhole,
   SearchCheck,
   ShieldCheck,
   UploadCloud,
@@ -13,18 +13,27 @@ import {
 
 const workflowSteps = [
   {
+    step: "01",
     title: "Upload Documents",
     description: "Add PDFs, text files, and images through a clean upload flow.",
+    bullets: ["Bulk upload support", "PDF, TXT, PNG, JPG, JPEG", "Secure file validation"],
+    chip: "Input layer",
     icon: UploadCloud,
   },
   {
+    step: "02",
     title: "Process & Classify",
     description: "Extract text, OCR weak pages, classify content, and index chunks.",
+    bullets: ["OCR and page rendering", "Structured document classification", "Vector indexing for retrieval"],
+    chip: "Intelligence layer",
     icon: FileCheck2,
   },
   {
+    step: "03",
     title: "Ask with Citations",
     description: "Get answers grounded with document names and page references.",
+    bullets: ["Citation-backed answers", "Page thumbnails", "No-context refusal"],
+    chip: "Answer layer",
     icon: Bot,
   },
 ];
@@ -43,14 +52,14 @@ const metrics = [
     label: "Citation-first answers",
   },
   {
-    value: "0",
-    label: "Hallucination mode",
+    value: "On",
+    label: "No-context refusal",
   },
 ];
 
 function DocumentIntelligenceIllustration() {
   return (
-    <div className="relative mx-auto h-[360px] w-full max-w-xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+    <div className="hidden xl:block relative mx-auto h-[360px] w-full max-w-xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.12),transparent_30%),radial-gradient(circle_at_82%_20%,rgba(99,102,241,0.10),transparent_30%)]" />
 
       <div className="relative flex h-full flex-col justify-between">
@@ -163,15 +172,15 @@ function DocumentIntelligenceIllustration() {
 
 export default function HomePage() {
   return (
-    <section className="space-y-8">
+    <section className="space-y-10 px-4 py-6 sm:px-6 lg:px-8">
       <div className="overflow-hidden rounded-[2.25rem] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="grid gap-8 p-7 sm:p-9 lg:grid-cols-[1.02fr_0.98fr] lg:p-10">
+        <div className="grid gap-8 p-8 lg:grid-cols-[1.02fr_0.98fr] lg:p-10">
           <div className="flex flex-col justify-center">
             <div className="inline-flex w-fit rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-cyan-700">
               Welcome to Document Intelligence
             </div>
 
-            <h2 className="mt-7 max-w-3xl text-4xl font-black tracking-[-0.045em] text-slate-950 sm:text-5xl lg:text-6xl">
+            <h2 className="mt-7 max-w-3xl text-4xl lg:text-5xl xl:text-6xl font-black tracking-[-0.045em] text-slate-950">
               Secure answers from documents, backed by citations.
             </h2>
 
@@ -215,36 +224,83 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <section className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <div className="max-w-2xl">
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-indigo-600">
+            Product Journey
+          </p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
+            Upload, understand, then ask.
+          </h2>
+          <p className="mt-3 text-sm font-medium leading-7 text-slate-600">
+            Follow the same path the system uses internally: ingest the source,
+            prepare it for retrieval, then answer only with grounded evidence.
+          </p>
+        </div>
+
         {workflowSteps.map((step, index) => {
           const Icon = step.icon;
 
           return (
-            <div
+            <article
               key={step.title}
-              className="group rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(15,23,42,0.08)]"
+              className="group relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/80 p-6 shadow-xl shadow-slate-300/40 backdrop-blur-xl transition hover:-translate-y-1 hover:shadow-2xl sm:p-8"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
-                  <Icon className="h-6 w-6" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.12),transparent_55%)] opacity-0 transition group-hover:opacity-100" />
+
+              <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
+                    <Icon className="h-7 w-7" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-500">
+                        Step {step.step}
+                      </span>
+                      <span className="rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">
+                        {step.chip}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-4 text-2xl font-black text-slate-950">
+                      {step.title}
+                    </h3>
+
+                    <p className="mt-3 max-w-2xl text-sm font-medium leading-7 text-slate-600">
+                      {step.description}
+                    </p>
+
+                    <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                      {step.bullets.map((bullet) => (
+                        <div
+                          key={bullet}
+                          className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm"
+                        >
+                          <CircleCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                          <span>{bullet}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-600">
-                  {index + 1}
+                <div className="flex shrink-0 items-center gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-950 px-5 py-4 text-white shadow-xl shadow-slate-950/10">
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">
+                      Workflow
+                    </p>
+                    <p className="mt-1 text-3xl font-black">
+                      {index + 1}
+                    </p>
+                  </div>
                 </div>
               </div>
-
-              <h3 className="mt-5 text-xl font-black text-slate-950">
-                {step.title}
-              </h3>
-
-              <p className="mt-2 text-sm font-medium leading-6 text-slate-600">
-                {step.description}
-              </p>
-            </div>
+            </article>
           );
         })}
-      </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-white shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
@@ -266,7 +322,7 @@ export default function HomePage() {
           {metrics.map((metric) => (
             <div
               key={metric.label}
-              className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm"
+              className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm"
             >
               <p className="text-3xl font-black text-slate-950">
                 {metric.value}

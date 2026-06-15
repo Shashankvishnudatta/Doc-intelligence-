@@ -16,10 +16,11 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str | None = None
     RAG_USE_GEMINI: bool = False
-    GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_VISION_OCR_ENABLED: bool = True
     GEMINI_VISION_MODEL: str = "gemini-2.5-flash"
+    RAG_USE_GEMINI_VISION: bool = False
+    GEMINI_TIMEOUT_SECONDS: int = 30
 
     MAX_UPLOAD_SIZE_MB: int = 25
     ALLOWED_FILE_TYPES: str = "application/pdf,text/plain,image/png,image/jpeg"

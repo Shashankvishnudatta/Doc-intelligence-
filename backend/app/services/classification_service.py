@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from google import genai
@@ -10,6 +11,13 @@ from app.core.config import get_settings
 from app.models.document import Document
 
 settings = get_settings()
+
+
+def is_image_document(document: Document) -> bool:
+    suffix = Path(document.original_filename).suffix.lower()
+    content_type = (document.content_type or "").lower()
+
+    return content_type.startswith("image/") or suffix in {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def build_document_text_for_classification(document: Document, max_chars: int = 12000) -> str:
@@ -71,6 +79,8 @@ def heuristic_fallback_classification(document: Document, document_text: str) ->
         if any(keyword in lower_text for keyword in keywords):
             topic_keywords.append(topic)
 
+    image_document = is_image_document(document)
+
     if "confidential" in lower_text or "sensitive" in lower_text or "private" in lower_text:
         sensitivity = "high"
     elif "policy" in lower_text or "internal" in lower_text or "employee" in lower_text:
@@ -79,15 +89,15 @@ def heuristic_fallback_classification(document: Document, document_text: str) ->
         sensitivity = "low"
 
     return {
-        "document_type": "unknown_or_text_document",
+        "document_type": "image_or_ocr_document" if image_document else "unknown_or_text_document",
         "primary_topic": topic_keywords[0] if topic_keywords else "general",
         "secondary_topics": topic_keywords[1:],
         "content_characteristics": {
             "has_tables": any(page.tables_json not in (None, "", "[]") for page in document.pages),
-            "has_scanned_or_ocr_content": "[OCR TEXT]" in document_text,
+            "has_scanned_or_ocr_content": "[OCR TEXT]" in document_text or image_document,
             "is_policy_or_guideline": "policy" in lower_text or "guideline" in lower_text,
-            "is_image_heavy": False,
-            "is_handwritten_possible": False,
+            "is_image_heavy": image_document,
+            "is_handwritten_possible": image_document,
             "language": "unknown",
         },
         "sensitivity": {
@@ -203,7 +213,13 @@ def classify_and_store_document(document_id: str, db: Session) -> Document:
         document_text = build_document_text_for_classification(document=document)
 
         if not document_text.strip():
-            raise ValueError("No extracted text available for classification.")
+            if is_image_document(document):
+                document_text = (
+                    f"Image-based document: {document.original_filename}. "
+                    "OCR text was unavailable or too weak. Visual verification is required."
+                )
+            else:
+                raise ValueError("No extracted text available for classification.")
 
         classification = classify_with_gemini(
             document=document,

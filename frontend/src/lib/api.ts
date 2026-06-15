@@ -1,5 +1,6 @@
 import type {
   BulkUploadResponse,
+  DeleteDocumentResponse,
   DocumentListItem,
   IndexResponse,
 } from "@/types/api";
@@ -116,7 +117,7 @@ export async function deleteDocument(documentId: string) {
     throw new Error(errorText || "Failed to delete document");
   }
 
-  return response.json();
+  return response.json() as Promise<DeleteDocumentResponse>;
 }
 
 export function getApiAssetUrl(pathOrUrl?: string | null) {

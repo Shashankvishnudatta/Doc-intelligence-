@@ -1,89 +1,82 @@
 "use client";
 
-import Link from "next/link";
+import { PageNav } from "@/components/layout/PageNav";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { Bot, Database, Home, UploadCloud } from "lucide-react";
+import { useEffect, useState } from "react";
 
-const navItems = [
-  {
-    href: "/",
-    label: "Overview",
-    icon: Home,
-  },
-  {
-    href: "/chat",
-    label: "Chat",
-    icon: Bot,
-  },
-  {
-    href: "/upload",
-    label: "Upload",
-    icon: UploadCloud,
-  },
-  {
-    href: "/documents",
-    label: "Knowledge Base",
-    icon: Database,
-  },
-];
+type AppShellProps = {
+  children: React.ReactNode;
+};
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+const CHAT_SIDEBAR_STORAGE_KEY = "bfai_chat_sidebar_open";
+
+export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const isChatPage = pathname === "/chat";
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+
+    return window.localStorage.getItem(CHAT_SIDEBAR_STORAGE_KEY) !== "false";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      CHAT_SIDEBAR_STORAGE_KEY,
+      String(isSidebarOpen)
+    );
+  }, [isSidebarOpen]);
 
   return (
-    <div className="soft-grid min-h-screen text-slate-950">
-      <div className="pointer-events-none fixed inset-0">
-        <div className="absolute left-[-10%] top-[-12%] h-96 w-96 rounded-full bg-cyan-200/35 blur-3xl" />
-        <div className="absolute right-[-8%] top-[-10%] h-96 w-96 rounded-full bg-indigo-200/35 blur-3xl" />
-        <div className="absolute bottom-[-20%] left-[35%] h-[28rem] w-[28rem] rounded-full bg-sky-100/60 blur-3xl" />
-      </div>
+    <div className="min-h-[100dvh] w-full bg-slate-50">
+      {isChatPage ? (
+        <div className="relative flex h-[100dvh] w-full overflow-hidden bg-slate-950">
+          {isSidebarOpen && <Sidebar />}
 
-      <div className="relative mx-auto min-h-screen max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        <header className="sticky top-4 z-40 mb-7 rounded-[1.75rem] border border-slate-200/80 bg-white/90 px-5 py-4 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <Link href="/" className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.35em] text-cyan-700">
-                BFAI Assessment
-              </p>
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((value) => !value)}
+            aria-label={isSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            title={isSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            className={`fixed top-4 z-[60] flex h-11 w-11 items-center justify-center rounded-2xl border border-white/70 bg-white/90 text-slate-700 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition-all duration-300 hover:bg-slate-950 hover:text-white ${
+              isSidebarOpen ? "left-4 lg:left-[336px]" : "left-4"
+            }`}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
 
-              <h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">
-                Document Intelligence + Agentic RAG
-              </h1>
+          <main className="relative min-w-0 flex-1 overflow-y-auto bg-slate-50">
+            <div className="pointer-events-none fixed inset-0 overflow-hidden">
+              <div className="absolute -top-32 left-1/4 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl" />
+              <div className="absolute right-0 top-0 h-[32rem] w-[32rem] rounded-full bg-indigo-300/20 blur-3xl" />
+              <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-violet-200/20 blur-3xl" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] [background-size:28px_28px]" />
+            </div>
 
-              <p className="mt-1 text-xs font-semibold text-slate-500">
-                OCR · Classification · Vector Search · Cited Answers
-              </p>
-            </Link>
-
-            <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100/80 p-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
-                      isActive
-                        ? "bg-slate-950 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-white hover:text-slate-950"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            <div className="relative z-10 min-h-full">{children}</div>
+          </main>
+        </div>
+      ) : (
+        <main className="relative min-h-[100dvh] w-full overflow-y-auto bg-slate-50">
+          <div className="pointer-events-none fixed inset-0 overflow-hidden">
+            <div className="absolute -top-32 left-1/4 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl" />
+            <div className="absolute right-0 top-0 h-[32rem] w-[32rem] rounded-full bg-indigo-300/20 blur-3xl" />
+            <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-violet-200/20 blur-3xl" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] [background-size:28px_28px]" />
           </div>
-        </header>
 
-        <main>{children}</main>
-      </div>
+          <PageNav />
+
+          <div className="relative z-10 min-h-full pt-28 sm:pt-24">
+            {children}
+          </div>
+        </main>
+      )}
     </div>
   );
 }
+
+export default AppShell;

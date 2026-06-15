@@ -1,10 +1,32 @@
 import json
+import shutil
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.document import Document, DocumentPage
 from app.services.parser_service import parse_document_file
+
+settings = get_settings()
+
+
+def clear_document_page_image_directory(document_id: str) -> None:
+    base_dir = Path(settings.PAGE_IMAGE_DIR).resolve()
+    page_dir = (base_dir / document_id).resolve()
+
+    try:
+        page_dir.relative_to(base_dir)
+    except ValueError:
+        print(
+            f"[Parser WARNING] skipped_page_image_cleanup unsafe_path={page_dir}"
+        )
+        return
+
+    if page_dir.exists() and page_dir.is_dir():
+        shutil.rmtree(page_dir)
+        print(f"[Parser] cleared_page_image_dir={page_dir}")
 
 
 def parse_and_store_document(document: Document, db: Session) -> Document:
@@ -17,6 +39,8 @@ def parse_and_store_document(document: Document, db: Session) -> Document:
             DocumentPage.document_id == document.id
         ).delete()
         db.commit()
+
+        clear_document_page_image_directory(document.id)
 
         parsed_pages = parse_document_file(
             file_path=document.file_path,

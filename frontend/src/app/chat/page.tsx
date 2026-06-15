@@ -21,6 +21,7 @@ import {
   Search,
   Send,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 import { getApiAssetUrl } from "@/lib/api";
 
@@ -175,6 +176,14 @@ export default function ChatPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
+      const pendingDocumentId = window.localStorage.getItem(
+        "bfai_pending_document_id"
+      );
+
+      if (pendingDocumentId) {
+        window.localStorage.removeItem("bfai_pending_document_id");
+      }
+
       const storedSessions = loadStoredSessions();
 
       if (storedSessions.length > 0) {
@@ -186,7 +195,9 @@ export default function ChatPage() {
         setSessions(sortedSessions);
         setActiveSessionId(sortedSessions[0].id);
         setMessages(sortedSessions[0].messages);
-        setSelectedDocumentId(sortedSessions[0].selectedDocumentId || "");
+        setSelectedDocumentId(
+          pendingDocumentId || sortedSessions[0].selectedDocumentId || ""
+        );
         return;
       }
 
@@ -195,7 +206,7 @@ export default function ChatPage() {
       setSessions([firstSession]);
       setActiveSessionId(firstSession.id);
       setMessages([]);
-      setSelectedDocumentId("");
+      setSelectedDocumentId(pendingDocumentId || "");
     });
   }, []);
 
@@ -448,6 +459,44 @@ export default function ChatPage() {
     };
   }, [openSessionById]);
 
+  useEffect(() => {
+    function handleDeletedSession(event: Event) {
+      const customEvent = event as CustomEvent<{ sessionId: string }>;
+      const deletedSessionId = customEvent.detail?.sessionId;
+
+      if (!deletedSessionId) {
+        return;
+      }
+
+      const remainingSessions = loadStoredSessions();
+      setSessions(remainingSessions);
+
+      if (deletedSessionId !== activeSessionId) {
+        return;
+      }
+
+      const newSession = createEmptySession();
+      const nextSessions = [newSession, ...remainingSessions];
+
+      setSessions(nextSessions);
+      saveStoredSessions(nextSessions);
+      setActiveSessionId(newSession.id);
+      setMessages([]);
+      setInput("");
+      setError(null);
+      setSelectedDocumentId("");
+    }
+
+    window.addEventListener("bfai:delete-chat-session", handleDeletedSession);
+
+    return () => {
+      window.removeEventListener(
+        "bfai:delete-chat-session",
+        handleDeletedSession
+      );
+    };
+  }, [activeSessionId]);
+
   return (
     <div className="h-[100dvh] w-full overflow-hidden p-4 font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       <div className="flex h-full w-full overflow-hidden rounded-[2rem] border border-white/70 bg-white/70 shadow-2xl shadow-slate-300/50 backdrop-blur-xl">
@@ -455,24 +504,49 @@ export default function ChatPage() {
         <main className="relative flex min-w-0 flex-1 flex-col bg-white/70">
           
           {/* Subtle Top Header */}
-          <header className="absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-between bg-white/70 px-6 backdrop-blur-md lg:px-8">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
+          <header className="absolute inset-x-0 top-0 z-10 flex min-h-16 flex-col gap-3 bg-white/75 px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between lg:px-8">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-500">
               {selectedDocument ? (
                 <>
-                  <FileText className="h-4 w-4 text-indigo-500" />
-                  Extracting from: <span className="text-slate-900">{selectedDocument.original_filename}</span>
+                  <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                  <span className="shrink-0">Extracting from:</span>
+                  <span className="truncate text-slate-900">
+                    {selectedDocument.original_filename}
+                  </span>
                 </>
               ) : (
                 <>
-                  <Search className="h-4 w-4 text-slate-400" />
-                  Querying entire knowledge base ({indexedDocuments.length} files)
+                  <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="truncate">
+                    Querying entire knowledge base ({indexedDocuments.length} files)
+                  </span>
                 </>
               )}
             </div>
+
+            <label className="relative w-full sm:w-80">
+              <span className="sr-only">Select document scope</span>
+              <select
+                value={selectedDocumentId || "all"}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedDocumentId(value === "all" ? "" : value);
+                }}
+                className="h-11 w-full appearance-none truncate rounded-2xl border border-slate-200 bg-white/90 px-4 pr-10 text-sm font-bold text-slate-700 shadow-sm outline-none transition hover:border-indigo-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
+              >
+                <option value="all">All documents</option>
+                {indexedDocuments.map((document) => (
+                  <option key={document.id} value={document.id}>
+                    {document.original_filename}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </label>
           </header>
 
           {/* Chat Stream */}
-          <div className="flex-1 overflow-y-auto px-4 pb-40 pt-24 sm:px-8">
+          <div className="flex-1 overflow-y-auto px-4 pb-40 pt-32 sm:px-8">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
                 <div className="relative mb-8 flex h-24 w-24 items-center justify-center rounded-[2rem] border border-slate-100 bg-white shadow-2xl shadow-indigo-500/10">

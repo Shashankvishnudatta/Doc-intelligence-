@@ -12,7 +12,8 @@ data/sqlite/*
 !data/pages/.gitkeep
 !data/chroma/.gitkeep
 !data/sqlite/.gitkeep
-
+# Local emergency maintenance script - do not ship
+backend/scripts/force_delete_document.py
 *.db
 *.sqlite
 *.log
