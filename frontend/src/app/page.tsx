@@ -69,7 +69,7 @@ function DocumentIntelligenceIllustration() {
               Live Pipeline
             </p>
             <h3 className="mt-1 text-lg font-black text-slate-950">
-              Documents → Intelligence → Answers
+              Documents to Intelligence to Answers
             </h3>
           </div>
 
@@ -90,7 +90,7 @@ function DocumentIntelligenceIllustration() {
                     Policy.pdf
                   </p>
                   <p className="text-xs font-medium text-slate-500">
-                    12 pages · OCR ready
+                    12 pages - OCR ready
                   </p>
                 </div>
               </div>
@@ -146,7 +146,7 @@ function DocumentIntelligenceIllustration() {
                 Citation
               </p>
               <p className="mt-1 text-xs font-medium text-white">
-                policy.pdf · page 3
+                policy.pdf - page 3
               </p>
             </div>
           </div>
@@ -336,21 +336,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <footer className="flex flex-col gap-3 rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-        <p>BFAI Assessment · Document Intelligence System</p>
-
-        <div className="flex flex-wrap gap-4">
-          <Link href="/documents" className="hover:text-slate-950">
-            Knowledge Base
-          </Link>
-          <Link href="/upload" className="hover:text-slate-950">
-            Upload
-          </Link>
-          <Link href="/chat" className="hover:text-slate-950">
-            Chat
-          </Link>
-        </div>
-      </footer>
+      
     </section>
   );
 }

@@ -184,11 +184,11 @@ function getDocumentKind(contentType: string, filename: string) {
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "Unknown date";
+  if (!value) return null;
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "Unknown date";
+  if (Number.isNaN(date.getTime())) return null;
 
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
@@ -430,6 +430,12 @@ export default function DocumentsPage() {
     router.push("/chat");
   }
 
+  function handleSelectDocument(documentId: string) {
+    setSelectedDocumentId((currentDocumentId) =>
+      currentDocumentId === documentId ? null : documentId
+    );
+  }
+
   useEffect(() => {
     queueMicrotask(() => {
       loadDocuments();
@@ -624,11 +630,11 @@ export default function DocumentsPage() {
                       key={document.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedDocumentId(document.id)}
+                      onClick={() => handleSelectDocument(document.id)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          setSelectedDocumentId(document.id);
+                          handleSelectDocument(document.id);
                         }
                       }}
                       className={`grid cursor-pointer gap-4 rounded-3xl border p-4 text-left transition xl:grid-cols-[1fr_auto] ${
@@ -651,10 +657,12 @@ export default function DocumentsPage() {
                           </div>
 
                           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-500">
-                            <span className="inline-flex items-center gap-1.5">
-                              <CalendarClock className="h-3.5 w-3.5" />
-                              {formatDateTime(document.created_at)}
-                            </span>
+                            {document.created_at && formatDateTime(document.created_at) ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <CalendarClock className="h-3.5 w-3.5" />
+                                {formatDateTime(document.created_at)}
+                              </span>
+                            ) : null}
                             <span>{documentKind}</span>
                             <span>
                               {document.page_count} page

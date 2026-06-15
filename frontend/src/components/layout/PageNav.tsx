@@ -51,6 +51,7 @@ export function PageNav() {
       <nav className="flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-2 rounded-[1.5rem] border border-white/70 bg-white/85 p-2 shadow-xl shadow-slate-300/30 backdrop-blur-xl">
         <button
           type="button"
+          aria-label="Go back"
           onClick={handleBack}
           className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-950 hover:text-white"
         >
@@ -68,6 +69,7 @@ export function PageNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-label={`Go to ${item.label.toLowerCase()}`}
               className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl px-3 text-sm font-black transition ${
                 isActive
                   ? "bg-slate-950 text-white shadow-lg shadow-slate-950/15"

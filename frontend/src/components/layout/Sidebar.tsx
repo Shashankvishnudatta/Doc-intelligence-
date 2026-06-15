@@ -94,6 +94,7 @@ export function Sidebar() {
     event: MouseEvent<HTMLButtonElement>,
     sessionId: string
   ) {
+    event.preventDefault();
     event.stopPropagation();
 
     try {
@@ -161,9 +162,9 @@ export function Sidebar() {
           </div>
 
           <div>
-            <p className="text-base font-black tracking-tight">DOC AI</p>
+            <p className="text-base font-black tracking-tight">Doc AI</p>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-500">
-              Intelligence Mode
+              RAG Workspace
             </p>
           </div>
         </div>

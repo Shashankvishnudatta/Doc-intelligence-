@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import Link from "next/link";
 import {
+  ChangeEvent,
   FormEvent,
   useCallback,
   KeyboardEvent,
@@ -22,8 +22,16 @@ import {
   Send,
   Plus,
   ChevronDown,
+  ImageIcon,
+  UploadCloud,
 } from "lucide-react";
-import { getApiAssetUrl } from "@/lib/api";
+import {
+  classifyDocument,
+  getApiAssetUrl,
+  indexDocument,
+  parseDocument,
+  uploadDocuments,
+} from "@/lib/api";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -77,13 +85,10 @@ type ChatSession = {
   updatedAt: string;
 };
 
-const demoQuestions = [
-  "Which document contains financial data?",
-  "Which document is highly sensitive?",
-  "What does the access SOP say about interns?",
-  "What does the RAG research report say about hallucination?",
-];
 const CHAT_STORAGE_KEY = "bfai_document_rag_chat_sessions_v1";
+const CHAT_UPLOAD_DOCUMENT_ACCEPT =
+  ".pdf,.txt,.png,.jpg,.jpeg,.webp,application/pdf,text/plain,image/png,image/jpeg,image/webp";
+const CHAT_UPLOAD_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp";
 
 function createEmptySession(): ChatSession {
   const now = new Date().toISOString();
@@ -110,6 +115,44 @@ function buildChatTitle(question: string) {
   }
 
   return `${cleaned.slice(0, 42).trim()}...`;
+}
+
+function isAllowedStatus(status: string, allowed: string[]) {
+  return allowed.includes(status.toLowerCase());
+}
+
+function assertDocumentStage(
+  document: DocumentItem,
+  allowedStatuses: string[],
+  stageName: string
+) {
+  const currentStatus = String(document.status || "").toLowerCase();
+
+  if (currentStatus === "failed") {
+    throw new Error(
+      document.error_message || `${stageName} failed on the backend.`
+    );
+  }
+
+  if (!isAllowedStatus(currentStatus, allowedStatuses)) {
+    throw new Error(
+      `${stageName} did not complete correctly. Backend returned status: ${document.status}`
+    );
+  }
+}
+
+function assertIndexStage(indexResult: { status: string; error_message?: string | null }) {
+  const currentStatus = String(indexResult.status || "").toLowerCase();
+
+  if (currentStatus === "failed") {
+    throw new Error(indexResult.error_message || "Indexing failed.");
+  }
+
+  if (currentStatus !== "indexed") {
+    throw new Error(
+      `Indexing did not complete correctly. Backend returned status: ${indexResult.status}`
+    );
+  }
 }
 
 function loadStoredSessions(): ChatSession[] {
@@ -159,10 +202,18 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [, setDocumentsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const [chatUploadAccept, setChatUploadAccept] = useState(
+    CHAT_UPLOAD_DOCUMENT_ACCEPT
+  );
+  const [isChatUploading, setIsChatUploading] = useState(false);
+  const [chatUploadStatus, setChatUploadStatus] = useState<string | null>(null);
   
   const [previewCitation, setPreviewCitation] = useState<Citation | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const chatUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const attachMenuRef = useRef<HTMLDivElement | null>(null);
 
   const indexedDocuments = useMemo(
     () => documents.filter((doc) => doc.status === "indexed"),
@@ -173,6 +224,24 @@ export default function ChatPage() {
     () => indexedDocuments.find((doc) => doc.id === selectedDocumentId) ?? null,
     [indexedDocuments, selectedDocumentId]
   );
+
+  const fetchDocuments = useCallback(async () => {
+    try {
+      setDocumentsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/documents`);
+      if (!response.ok) throw new Error("Failed to load documents.");
+      const data = (await response.json()) as DocumentItem[];
+      setDocuments(data);
+      return data;
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load knowledge base."
+      );
+      return [];
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -211,21 +280,10 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    async function fetchDocuments() {
-      try {
-        setDocumentsLoading(true);
-        const response = await fetch(`${API_BASE_URL}/documents`);
-        if (!response.ok) throw new Error("Failed to load documents.");
-        const data = (await response.json()) as DocumentItem[];
-        setDocuments(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load knowledge base.");
-      } finally {
-        setDocumentsLoading(false);
-      }
-    }
-    fetchDocuments();
-  }, []);
+    queueMicrotask(() => {
+      fetchDocuments();
+    });
+  }, [fetchDocuments]);
 
   // Fix 2 — Clean the auto-save useEffect
   useEffect(() => {
@@ -285,6 +343,38 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (!isAttachMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        attachMenuRef.current &&
+        event.target instanceof Node &&
+        attachMenuRef.current.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsAttachMenuOpen(false);
+    }
+
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsAttachMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isAttachMenuOpen]);
 
   async function sendQuestion(questionOverride?: string) {
     const question = (questionOverride ?? input).trim();
@@ -362,6 +452,107 @@ export default function ChatPage() {
     }
   }
 
+  function openChatUploadPicker(accept: string) {
+    setChatUploadAccept(accept);
+    setIsAttachMenuOpen(false);
+
+    window.setTimeout(() => {
+      chatUploadInputRef.current?.click();
+    }, 0);
+  }
+
+  async function handleChatUploadFiles(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+
+    if (!file || isChatUploading) {
+      event.target.value = "";
+      return;
+    }
+
+    setError(null);
+    setIsChatUploading(true);
+    setChatUploadStatus(`Uploading ${file.name}...`);
+
+    try {
+      const uploadResponse = await uploadDocuments([file]);
+      const uploadResult = uploadResponse.results[0];
+      const uploadError = uploadResult as {
+        detail?: string | null;
+        error_message?: string | null;
+      };
+
+      if (
+        !uploadResult ||
+        uploadResult.status !== "uploaded" ||
+        !uploadResult.document_id
+      ) {
+        throw new Error(
+          uploadError?.error_message ||
+            uploadError?.detail ||
+            "Upload failed before parsing started."
+        );
+      }
+
+      const documentId = uploadResult.document_id;
+
+      setChatUploadStatus("Parsing document...");
+      const parsedDocument = await parseDocument(documentId);
+      assertDocumentStage(
+        parsedDocument,
+        ["parsed", "classified", "indexed"],
+        "Parsing"
+      );
+
+      setChatUploadStatus("Classifying document...");
+      const classifiedDocument = await classifyDocument(documentId);
+      assertDocumentStage(
+        classifiedDocument,
+        ["classified", "indexed"],
+        "Classification"
+      );
+
+      setChatUploadStatus("Indexing document...");
+      const indexedDocument = await indexDocument(documentId);
+      assertIndexStage(indexedDocument);
+
+      const refreshedDocuments = await fetchDocuments();
+      const indexedReadyDocument: DocumentItem = {
+        ...classifiedDocument,
+        status: "indexed",
+      };
+      const readyDocument =
+        refreshedDocuments.find((document) => document.id === documentId) ??
+        indexedReadyDocument;
+
+      setDocuments((currentDocuments) => {
+        if (currentDocuments.some((document) => document.id === documentId)) {
+          return currentDocuments.map((document) =>
+            document.id === documentId ? readyDocument : document
+          );
+        }
+
+        return [readyDocument, ...currentDocuments];
+      });
+      setSelectedDocumentId(documentId);
+      setError(null);
+      setChatUploadStatus(
+        `Ready: ${readyDocument.original_filename || file.name} is selected.`
+      );
+    } catch (err) {
+      setChatUploadStatus(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Upload failed. Please try again."
+      );
+    } finally {
+      setIsChatUploading(false);
+      event.target.value = "";
+    }
+  }
+
   function handleNewChat() {
     const newSession = createEmptySession();
 
@@ -375,6 +566,8 @@ export default function ChatPage() {
     setMessages([]);
     setInput("");
     setError(null);
+    setChatUploadStatus(null);
+    setIsAttachMenuOpen(false);
     setSelectedDocumentId("");
   }
 
@@ -408,6 +601,8 @@ export default function ChatPage() {
     setSelectedDocumentId(session.selectedDocumentId || "");
     setInput("");
     setError(null);
+    setChatUploadStatus(null);
+    setIsAttachMenuOpen(false);
   }, []);
 
   const openSessionById = useCallback(
@@ -468,22 +663,40 @@ export default function ChatPage() {
         return;
       }
 
-      const remainingSessions = loadStoredSessions();
-      setSessions(remainingSessions);
+      const remainingSessions = [...loadStoredSessions()].sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
 
       if (deletedSessionId !== activeSessionId) {
+        setSessions(remainingSessions);
+        return;
+      }
+
+      if (remainingSessions.length > 0) {
+        const nextSession = remainingSessions[0];
+
+        setSessions(remainingSessions);
+        setActiveSessionId(nextSession.id);
+        setMessages(nextSession.messages);
+        setInput("");
+        setError(null);
+        setChatUploadStatus(null);
+        setIsAttachMenuOpen(false);
+        setSelectedDocumentId(nextSession.selectedDocumentId || "");
         return;
       }
 
       const newSession = createEmptySession();
-      const nextSessions = [newSession, ...remainingSessions];
 
-      setSessions(nextSessions);
-      saveStoredSessions(nextSessions);
+      setSessions([newSession]);
+      saveStoredSessions([newSession]);
       setActiveSessionId(newSession.id);
       setMessages([]);
       setInput("");
       setError(null);
+      setChatUploadStatus(null);
+      setIsAttachMenuOpen(false);
       setSelectedDocumentId("");
     }
 
@@ -557,21 +770,8 @@ export default function ChatPage() {
                   What do you need to know?
                 </h2>
                 <p className="mt-3 max-w-lg text-center text-base font-medium text-slate-500">
-                  Upload documents to the intelligence node, and ask questions. I will parse the data and cite exact pages instantly.
+                  Ask about your selected document or search across the knowledge base. Answers include source citations.
                 </p>
-                <div className="mt-8 flex max-w-2xl flex-wrap justify-center gap-3">
-                  {demoQuestions.map((question) => (
-                    <button
-                      key={question}
-                      type="button"
-                      disabled={isLoading}
-                      onClick={() => sendQuestion(question)}
-                      className="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-bold text-slate-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {question}
-                    </button>
-                  ))}
-                </div>
               </div>
             ) : (
              <div className="mx-auto w-full max-w-5xl space-y-10">
@@ -703,28 +903,101 @@ export default function ChatPage() {
                   <AlertCircle className="h-4 w-4" /> {error}
                 </div>
               )}
+              {chatUploadStatus && (
+                <div className="mb-4 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs font-bold text-indigo-700">
+                  {isChatUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {chatUploadStatus}
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="relative flex flex-col rounded-[2rem] border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-200/50 focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
                 <div className="flex items-start w-full">
-                  <Link
-                    href="/upload"
-                    title="Upload documents"
-                    className="ml-2 mt-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </Link>
+                  <div ref={attachMenuRef} className="relative ml-2 mt-2 shrink-0">
+                    <button
+                      type="button"
+                      title="Attach documents"
+                      aria-expanded={isAttachMenuOpen}
+                      aria-haspopup="menu"
+                      disabled={isChatUploading}
+                      onClick={() => setIsAttachMenuOpen((open) => !open)}
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isChatUploading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <Plus className="h-5 w-5" />
+                      )}
+                    </button>
+
+                    {isAttachMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute bottom-12 left-0 z-30 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-2xl shadow-slate-300/50 backdrop-blur-xl"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() =>
+                            openChatUploadPicker(CHAT_UPLOAD_DOCUMENT_ACCEPT)
+                          }
+                          className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
+                        >
+                          <UploadCloud className="mt-0.5 h-4 w-4 text-indigo-600" />
+                          <span>
+                            <span className="block text-sm font-black text-slate-900">
+                              Upload document
+                            </span>
+                            <span className="mt-0.5 block text-xs font-semibold text-slate-500">
+                              PDF, TXT, PNG, JPG, JPEG, or WEBP
+                            </span>
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() =>
+                            openChatUploadPicker(CHAT_UPLOAD_IMAGE_ACCEPT)
+                          }
+                          className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
+                        >
+                          <ImageIcon className="mt-0.5 h-4 w-4 text-indigo-600" />
+                          <span>
+                            <span className="block text-sm font-black text-slate-900">
+                              Upload image
+                            </span>
+                            <span className="mt-0.5 block text-xs font-semibold text-slate-500">
+                              Use image OCR and Gemini Vision
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+
+                    <input
+                      ref={chatUploadInputRef}
+                      type="file"
+                      accept={chatUploadAccept}
+                      className="hidden"
+                      onChange={handleChatUploadFiles}
+                    />
+                  </div>
                   <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    placeholder="Ask the intelligence node..."
+                    placeholder="Ask your documents..."
                     className="max-h-40 min-h-[56px] w-full resize-none bg-transparent px-5 py-4 text-base font-medium text-slate-900 outline-none placeholder:text-slate-400"
                   />
                 </div>
                 <div className="flex items-center justify-between px-3 pb-2 pt-2 border-t border-slate-50">
                   <div className="flex gap-2">
                      <div className="rounded-lg bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                       Cmd ⌘ + Enter to send
+                       ENTER TO SEND | SHIFT + ENTER FOR NEW LINE
                      </div>
                   </div>
                   <button
